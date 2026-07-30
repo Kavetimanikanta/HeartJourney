@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Admin Dashboard — Dil Se Shayari</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{--bg:#201214;--card:rgba(255,255,255,0.03);--accent:#CBA366}
+    body{margin:0;font-family:Inter, sans-serif;background:var(--bg);color:#F7E9DA;padding:28px}
+    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    h1{font-family:Cormorant Garamond,serif;margin:0;color:var(--accent)}
+    .logout{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;color:#F7E9DA}
+    .card{background:var(--card);padding:18px;border-radius:12px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:12px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.03);font-size:14px}
+    th{color:rgba(247,233,218,0.8)}
+    .btn-approve{background:#3F6B4A;color:#fff;padding:8px 12px;border-radius:10px;border:none;cursor:pointer}
+    .btn-send{background:#2ba84a;color:#0b2f16;padding:8px 12px;border-radius:12px;border:none;cursor:pointer}
+    .small{font-size:13px;color:rgba(247,233,218,0.7)}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Dil Se Shayari — Admin</h1>
+    <div>
+      <button id="logout" class="logout">Log out</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="small">Orders</div>
+    <table id="ordersTable">
+      <thead>
+        <tr><th>Order ID</th><th>Email</th><th>Phone</th><th>UTR</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const adminUsername = localStorage.getItem('adminUsername');
+    const adminPassword = localStorage.getItem('adminPassword');
+    const adminKey = localStorage.getItem('adminKey');
+    const adminSecret = adminPassword || adminKey;
+    if(!adminUsername || !adminSecret){ window.location.href = '/admin.html'; }
+
+    const EBOOK_URL = '/ebook.pdf'; // fallback, the server config can be used instead
+
+    function formatDate(d){ try{ return new Date(d).toLocaleString(); }catch(e){return d} }
+
+    function fetchOrders(){
+      const authParam = adminPassword ? 'adminPassword' : 'adminKey';
+      fetch('/api/orders?adminUsername=' + encodeURIComponent(adminUsername) + '&' + authParam + '=' + encodeURIComponent(adminSecret)).then(r=>r.json()).then(j=>{
+        if(!j.success){ alert('Unauthorized or error'); localStorage.removeItem('adminPassword'); localStorage.removeItem('adminKey'); window.location.href='/admin.html'; return; }
+        const tbody = document.querySelector('#ordersTable tbody'); tbody.innerHTML = '';
+        j.orders.reverse().forEach(o=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="small">${o.orderId}</td>
+            <td class="small">${o.email||'—'}</td>
+            <td class="small">${o.phone||'—'}</td>
+            <td class="small">${o.screenshot?o.screenshot.split('/').pop():'—'}</td>
+            <td class="small">₹${o.price||''}</td>
+            <td class="small">${o.status}</td>
+            <td class="small">${formatDate(o.createdAt)}</td>
+            <td class="small" style="white-space:nowrap">
+              ${o.status !== 'paid' ? '<button class="btn-approve">Approve</button>' : ''}
+              <button class="btn-send">📲 Send via WhatsApp</button>
+            </td>
+          `;
+          const approveBtn = tr.querySelector('.btn-approve');
+          const sendBtn = tr.querySelector('.btn-send');
+          if(approveBtn){ approveBtn.addEventListener('click', ()=> approveOrder(o.orderId, o, approveBtn)); }
+          if(sendBtn){ sendBtn.addEventListener('click', ()=> sendWhatsApp(o, sendBtn)); }
+          tbody.appendChild(tr);
+        });
+      }).catch(err=>{ console.error(err); alert('Failed to fetch orders'); });
+    }
+
+    function approveOrder(orderId, order, btn){
+      btn.disabled = true; btn.textContent = 'Approving...';
+      const authParam = adminPassword ? 'adminPassword' : 'adminKey';
+      fetch('/api/orders/' + encodeURIComponent(orderId) + '/approve?adminUsername=' + encodeURIComponent(adminUsername) + '&' + authParam + '=' + encodeURIComponent(adminSecret), { method:'POST' })
+        .then(r=>r.json()).then(j=>{
+          if(j.success){ btn.textContent = 'Approved'; fetchOrders(); } else { alert('Approve failed'); btn.disabled=false; btn.textContent='Approve'; }
+        }).catch(e=>{ alert('Error approving'); btn.disabled=false; btn.textContent='Approve'; });
+    }
+
+    function sendWhatsApp(order, btn){
+      // First approve if not already
+      const doSend = ()=>{
+        const phone = (order.phone || '').replace(/[^0-9]/g,'');
+        const to = phone.length===10 ? '91'+phone : phone;
+        const msg = `Namaste! 🙏 Aapka *Dil Se Shayari* ebook ready hai.\n\nDownload: ${location.origin}${EBOOK_URL}\n\nOrder ID: ${order.orderId}\n\nShukriya for your order!`;
+        const waUrl = 'https://wa.me/' + encodeURIComponent(to) + '?text=' + encodeURIComponent(msg);
+        window.open(waUrl, '_blank');
+      };
+
+      if(order.status === 'paid'){
+        doSend();
+      } else {
+        // Approve then send
+        btn.disabled = true; btn.textContent = 'Approving...';
+        const authParam = adminPassword ? 'adminPassword' : 'adminKey';
+        fetch('/api/orders/' + encodeURIComponent(order.orderId) + '/approve?adminUsername=' + encodeURIComponent(adminUsername) + '&' + authParam + '=' + encodeURIComponent(adminSecret), { method:'POST' })
+          .then(r=>r.json()).then(j=>{
+            if(j.success){ order.status = 'paid'; doSend(); btn.disabled=false; btn.textContent='📲 Send via WhatsApp'; fetchOrders(); }
+            else { alert('Approve failed'); btn.disabled=false; btn.textContent='📲 Send via WhatsApp'; }
+          }).catch(e=>{ alert('Error'); btn.disabled=false; btn.textContent='📲 Send via WhatsApp'; });
+      }
+    }
+
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.removeItem('adminPassword'); localStorage.removeItem('adminKey'); localStorage.removeItem('adminUsername'); window.location.href='/admin.html'; });
+
+    fetchOrders();
+  </script>
+</body>
+</html>

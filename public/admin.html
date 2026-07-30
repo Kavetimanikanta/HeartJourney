@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Admin Login — Dil Se Shayari</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:Inter, sans-serif;background:#1f1310;color:#F7E9DA;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+    .card{background:rgba(255,255,255,0.03);padding:28px;border-radius:12px;max-width:420px;width:100%;box-shadow:0 20px 50px -20px rgba(0,0,0,0.6)}
+    h1{font-family:Cormorant Garamond,serif;margin:0 0 10px;color:#E5C8A0}
+    label{display:block;margin-top:12px;font-size:13px;color:rgba(247,233,218,0.85)}
+    input{width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;margin-top:6px}
+    button{margin-top:18px;width:100%;padding:12px;border-radius:10px;border:none;background:#CBA366;color:#20140c;font-weight:700}
+    .note{margin-top:12px;font-size:13px;color:rgba(247,233,218,0.75)}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Admin Login</h1>
+    <p class="note">Enter your admin username and password to manage orders.</p>
+    <label>Username
+      <input id="adminUser" placeholder="Admin username">
+    </label>
+    <label>Password
+      <input id="adminPassword" type="password" placeholder="Admin password">
+    </label>
+    <button id="loginBtn">Sign in</button>
+    <p class="note">After signing in you'll be redirected to the admin dashboard.</p>
+  </div>
+  <script>
+    document.getElementById('loginBtn').addEventListener('click', ()=>{
+      const user = document.getElementById('adminUser').value.trim();
+      const pass = document.getElementById('adminPassword').value.trim();
+      if(!user || !pass){ alert('Please enter username and password'); return; }
+      localStorage.setItem('adminUsername', user);
+      localStorage.setItem('adminPassword', pass);
+      window.location.href = '/admin-dashboard.html';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Payment Under Review</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: dark; color:#F7E9DA; background:#2C1E13; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:'Inter',sans-serif; background:#20140c; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .page { width:100%; max-width:460px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:24px; padding:32px; box-shadow:0 30px 80px -34px rgba(0,0,0,0.55); }
+    .icon { font-size:42px; display:inline-flex; width:72px; height:72px; align-items:center; justify-content:center; background:rgba(255,255,255,0.08); border-radius:22px; margin-bottom:22px; }
+    h1 { margin:0 0 12px; font-family:'Cormorant Garamond',serif; font-size:30px; line-height:1.1; color:#E5C8A0; }
+    p { margin:0 0 24px; font-size:15px; line-height:1.75; color:rgba(247,233,218,0.88); }
+    .info { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:18px; margin-bottom:24px; }
+    .info div { display:flex; justify-content:space-between; gap:12px; font-size:14px; color:#F7E9DA; margin-bottom:12px; }
+    .info div:last-child { margin-bottom:0; }
+    .info span { color:rgba(247,233,218,0.7); }
+    .btn { display:block; width:100%; text-align:center; background:#CBA366; color:#20140c; text-decoration:none; font-weight:700; padding:16px 0; border-radius:14px; margin-bottom:16px; }
+    .contact { text-align:center; font-size:13px; color:rgba(247,233,218,0.8); }
+    .contact a { color:#F8E6C1; text-decoration:none; font-weight:600; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="icon">⌛</div>
+    <h1>Payment Received — Under Review</h1>
+    <p>Shukriya! Humein aapka payment proof mil gaya hai. Verify hote hi (usually within a few hours) aapko ebook email ho jaayegi.</p>
+    <div class="info">
+      <div><span>Order ID</span><strong id="displayOrderId">—</strong></div>
+      <div><span>Status</span><strong>Awaiting Verification</strong></div>
+    </div>
+    <a href="/" class="btn">Back to Home</a>
+    <p class="contact">Need help? Contact us on WhatsApp: <a href="https://wa.me/919346694527" target="_blank" rel="noopener">+91 93466 94527</a></p>
+  </main>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('orderId') || '—';
+    const el = document.getElementById('displayOrderId');
+    if(el) el.textContent = orderId;
+  </script>
+</body>
+</html>
