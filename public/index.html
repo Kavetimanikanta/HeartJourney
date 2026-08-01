@@ -809,6 +809,18 @@
   }
   .pay-success-contact:hover{ color:var(--paper); }
 
+  .pay-copy-btn{
+    margin-left:12px;
+    padding:6px 12px;
+    border:none;
+    border-radius:10px;
+    background:rgba(255,255,255,0.12);
+    color:#F7E9DA;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+    font-size:12px;
+  }
+  .pay-copy-btn:hover{ background:rgba(255,255,255,0.18); }
   .pay-wa-fallback{
     display:block;
     margin-top:14px;
@@ -900,11 +912,12 @@
         <div class="pay-info-row">
           <span>Pay to UPI ID</span>
           <strong id="payUpiId">9346694527@ybl</strong>
-        </div>
-        <div class="pay-info-row">
-          <span>Order ID</span>
-          <strong id="payOrderId">order_000000000000</strong>
-        </div>
+            <button type="button" id="copyUpiBtn" class="pay-copy-btn">Copy</button>
+          </div>
+          <div class="pay-info-row">
+            <span>Order ID</span>
+            <strong id="payOrderId">order_000000000000</strong>
+          </div>
       </div>
 
       <button type="button" class="pay-submit-btn" id="paySubmitBtn">✅ I've Paid — Submit</button>
@@ -1177,7 +1190,7 @@
 
       <div class="form-flourish"><svg viewBox="0 0 60 12"><path d="M0 6 Q15 0 30 6 T60 6" stroke="currentColor" stroke-width="1" fill="none"/></svg></div>
 
-      <form class="order-form" id="orderForm" novalidate>
+      <form class="order-form" id="orderForm" novalidate enctype="multipart/form-data">
         <label><span class="label-text">Naam</span> <span class="req">*</span>
           <input type="text" name="name" required placeholder="Aapka naam">
         </label>
@@ -1266,6 +1279,7 @@
   const payUpiIdEl = document.getElementById('payUpiId');
   const payOrderIdEl = document.getElementById('payOrderId');
   const payUpiLink = document.getElementById('payUpiLink');
+  const payUploadBox = document.getElementById('payUploadBox');
   const payScreenshot = document.getElementById('payScreenshot');
   const payPreview = document.getElementById('payPreview');
   const payUploadText = document.getElementById('payUploadText');
@@ -1320,6 +1334,22 @@
       if(e.key === 'Escape' && paymentModal.classList.contains('open')){ closePaymentModal(); }
     });
   }
+  const copyUpiBtn = document.getElementById('copyUpiBtn');
+  if(payUploadBox && payScreenshot){
+    payUploadBox.addEventListener('click', () => payScreenshot.click());
+  }
+  if(copyUpiBtn){
+    copyUpiBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(MERCHANT_UPI).then(() => {
+        const previous = copyUpiBtn.textContent;
+        copyUpiBtn.textContent = 'Copied';
+        setTimeout(() => copyUpiBtn.textContent = previous, 1500);
+      }).catch(() => {
+        copyUpiBtn.textContent = 'Copy UPI';
+      });
+    });
+  }
+
   if(payScreenshot){
     payScreenshot.addEventListener('change', ()=>{
       const file = payScreenshot.files && payScreenshot.files[0];

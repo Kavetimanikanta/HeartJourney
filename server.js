@@ -66,75 +66,72 @@ function writeOrders(orders) {
 // ---- Routes ----
 
 // Customer submits name/phone/email + payment screenshot after paying.
-app.post('/api/orders', (req, res) => {
-  upload.single('screenshot')(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({ success: false, error: err.message });
-    }
+app.post('/api/orders', upload.single('screenshot'), (req, res) => {
+  const { orderId, name, phone, email, whatsapp } = req.body;
 
-    const { orderId, name, phone, email, whatsapp } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, error: 'Name is required.' });
+  }
+  if (!phone || !/^[0-9]{10}$/.test(phone.trim())) {
+    return res.status(400).json({ success: false, error: 'A valid 10-digit phone number is required.' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'Payment screenshot is required.' });
+  }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, error: 'Name is required.' });
-    }
-    if (!phone || !/^[0-9]{10}$/.test(phone.trim())) {
-      return res.status(400).json({ success: false, error: 'A valid 10-digit phone number is required.' });
-    }
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: 'Payment screenshot is required.' });
-    }
+  const orders = readOrders();
+  const order = {
+    id: orders.length + 1,
+    orderId: orderId || `order_${Date.now()}`,
+    name: name.trim(),
+    phone: phone.trim(),
+    email: (email || '').trim(),
+    whatsapp: (whatsapp || '').trim(),
+    screenshot: `/uploads/${req.file.filename}`,
+    price: config.PRICE,
+    status: 'pending_verification',
+    createdAt: new Date().toISOString()
+  };
+  orders.push(order);
+  writeOrders(orders);
 
-    const orders = readOrders();
-    const order = {
-      id: orders.length + 1,
-      orderId: orderId || `order_${Date.now()}`,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: (email || '').trim(),
-      whatsapp: (whatsapp || '').trim(),
-      screenshot: `/uploads/${req.file.filename}`,
-      price: config.PRICE,
-      status: 'pending_verification',
-      createdAt: new Date().toISOString()
+  // send admin email notification if mail configured
+  if (mailTransport) {
+    const adminMsg = {
+      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      to: process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'owner@example.com',
+      subject: `New order received: ${order.orderId} — ${config.PRODUCT_NAME}`,
+      text: `New order ${order.orderId} received from ${order.name} (${order.phone}).`,
+      html: `<p>New order <strong>${order.orderId}</strong> received from ${order.name} (${order.phone}).</p>`
     };
-    orders.push(order);
-    writeOrders(orders);
+    mailTransport.sendMail(adminMsg).catch(() => {});
+  }
 
-    // send admin email notification if mail configured
-    if(mailTransport){
-      const adminMsg = {
+  // send customer email with ebook link (if email provided)
+  if (mailTransport && order.email) {
+    try {
+      const siteOrigin = config.CLIENT_BASE_URL || process.env.SITE_ORIGIN || `http://localhost:${config.PORT}`;
+      let ebookUrl = config.EBOOK_URL || '/ebook.pdf';
+      if (!/^https?:\/\//i.test(ebookUrl)) {
+        ebookUrl = siteOrigin.replace(/\/$/, '') + '/' + ebookUrl.replace(/^\//, '');
+      }
+      const customerMsg = {
         from: process.env.SMTP_FROM || 'no-reply@example.com',
-        to: process.env.ADMIN_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'owner@example.com',
-        subject: `New order received: ${order.orderId} — ${config.PRODUCT_NAME}`,
-        text: `New order ${order.orderId} received from ${order.name} (${order.phone}).`,
-        html: `<p>New order <strong>${order.orderId}</strong> received from ${order.name} (${order.phone}).</p>`
+        to: order.email,
+        subject: `Your order ${order.orderId} — ${config.APP_NAME}`,
+        text: `Namaste! Aapka ${config.APP_NAME} ebook ready hai. Download: ${ebookUrl} \n\nOrder ID: ${order.orderId} \n\nShukriya for your order!`,
+        html: `<p>Namaste! 🙏</p><p>Aapka <strong>${config.APP_NAME}</strong> ebook ready hai.</p><p><a href="${ebookUrl}" target="_blank">Download your ebook</a></p><p>Order ID: <strong>${order.orderId}</strong></p><p>Shukriya for your order!</p>`
       };
-      mailTransport.sendMail(adminMsg).catch(()=>{});
-    }
+      // attach PDF if present in public folder
+      const ebookPath = path.join(__dirname, 'public', (config.EBOOK_URL || '/ebook.pdf').replace(/^\//, ''));
+      if (fs.existsSync(ebookPath)) {
+        customerMsg.attachments = [{ filename: path.basename(ebookPath), path: ebookPath }];
+      }
+      mailTransport.sendMail(customerMsg).catch(() => {});
+    } catch (e) { /* ignore email errors */ }
+  }
 
-    // send customer email with ebook link (if email provided)
-    if(mailTransport && order.email){
-      try{
-        const siteOrigin = config.CLIENT_BASE_URL || process.env.SITE_ORIGIN || `http://localhost:${config.PORT}`;
-        const ebookUrl = siteOrigin + (config.EBOOK_URL || '/ebook.pdf');
-        const customerMsg = {
-          from: process.env.SMTP_FROM || 'no-reply@example.com',
-          to: order.email,
-          subject: `Your order ${order.orderId} — ${config.APP_NAME}`,
-          text: `Namaste! Aapka ${config.APP_NAME} ebook ready hai. Download: ${ebookUrl} \n\nOrder ID: ${order.orderId} \n\nShukriya for your order!`,
-          html: `<p>Namaste! 🙏</p><p>Aapka <strong>${config.APP_NAME}</strong> ebook ready hai.</p><p><a href="${ebookUrl}" target="_blank">Download your ebook</a></p><p>Order ID: <strong>${order.orderId}</strong></p><p>Shukriya for your order!</p>`
-        };
-        // attach PDF if present in public folder
-        const ebookPath = path.join(__dirname, 'public', (config.EBOOK_URL || '/ebook.pdf').replace(/^\//,''));
-        if(fs.existsSync(ebookPath)){
-          customerMsg.attachments = [{ filename: path.basename(ebookPath), path: ebookPath }];
-        }
-        mailTransport.sendMail(customerMsg).catch(()=>{});
-      }catch(e){ /* ignore email errors */ }
-    }
-
-    res.json({ success: true, message: 'Order received', orderId: order.orderId });
-  });
+  res.json({ success: true, message: 'Order received', orderId: order.orderId });
 });
 
 // Simple admin view of submitted orders: /api/orders?adminUsername=USER&adminKey=PASSWORD
