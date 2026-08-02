@@ -25,28 +25,19 @@
   <main class="page">
     <div class="icon">⌛</div>
     <h1>Payment Received — Under Review</h1>
-    <p>Shukriya! Humein aapka payment proof mil gaya hai. Verify hote hi (usually within a few hours) aapko ebook email ho jaayegi.</p>
+    <p>Shukriya! Humein aapka payment proof mil gaya hai. Verify hone ke baad aapko ebook WhatsApp ya email par bhej diya jayega.</p>
     <div class="info">
       <div><span>Order ID</span><strong id="displayOrderId">—</strong></div>
       <div><span>Status</span><strong>Awaiting Verification</strong></div>
     </div>
     <a href="/" class="btn">Back to Home</a>
-    <a id="ebookLink" class="btn" href="#" target="_blank" style="display:none;">Download your ebook</a>
     <p class="contact">Need help? Contact us on WhatsApp: <a href="https://wa.me/919346694527" target="_blank" rel="noopener">+91 93466 94527</a></p>
   </main>
   <script>
     const params = new URLSearchParams(window.location.search);
-    const orderId = params.get("orderId") || "�";
+    const orderId = params.get("orderId") || "—";
     const el = document.getElementById("displayOrderId");
     if(el) el.textContent = orderId;
-    fetch("/api/config").then(r=>r.json()).then(cfg=>{
-      const ebook = cfg.ebookUrl || "/ebook.pdf";
-      const ebookLink = document.getElementById("ebookLink");
-      if(ebookLink){
-        ebookLink.href = ebook;
-        ebookLink.style.display = "block";
-      }
-    }).catch(()=>{/* ignore */});
   </script>
 </body>
 </html>

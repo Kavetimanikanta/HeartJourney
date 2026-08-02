@@ -31,7 +31,7 @@
     <div class="small">Orders</div>
     <table id="ordersTable">
       <thead>
-        <tr><th>Order ID</th><th>Email</th><th>Phone</th><th>UTR</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr>
+        <tr><th>Order ID</th><th>Email</th><th>Phone</th><th>Screenshot</th><th>Transaction ID</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -44,9 +44,18 @@
     const adminSecret = adminPassword || adminKey;
     if(!adminUsername || !adminSecret){ window.location.href = '/admin.html'; }
 
-    const EBOOK_URL = '/ebook.pdf'; // fallback, the server config can be used instead
+    const DEFAULT_EBOOK_PATH = '/ebook.pdf';
+    let clientBaseUrl = location.origin;
+    let ebookPath = DEFAULT_EBOOK_PATH;
 
     function formatDate(d){ try{ return new Date(d).toLocaleString(); }catch(e){return d} }
+
+    function getEbookLink(){
+      if(/^https?:\/\//i.test(ebookPath)){
+        return ebookPath;
+      }
+      return clientBaseUrl.replace(/\/$/, '') + '/' + ebookPath.replace(/^\//, '');
+    }
 
     function fetchOrders(){
       const authParam = adminPassword ? 'adminPassword' : 'adminKey';
@@ -54,20 +63,23 @@
         if(!j.success){ alert('Unauthorized or error'); localStorage.removeItem('adminPassword'); localStorage.removeItem('adminKey'); window.location.href='/admin.html'; return; }
         const tbody = document.querySelector('#ordersTable tbody'); tbody.innerHTML = '';
         j.orders.reverse().forEach(o=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="small">${o.orderId}</td>
-            <td class="small">${o.email||'—'}</td>
-            <td class="small">${o.phone||'—'}</td>
-            <td class="small">${o.screenshot?o.screenshot.split('/').pop():'—'}</td>
-            <td class="small">₹${o.price||''}</td>
-            <td class="small">${o.status}</td>
-            <td class="small">${formatDate(o.createdAt)}</td>
-            <td class="small" style="white-space:nowrap">
-              ${o.status !== 'paid' ? '<button class="btn-approve">Approve</button>' : ''}
-              <button class="btn-send">📲 Send via WhatsApp</button>
-            </td>
-          `;
+          const screenshotLabel = o.screenshot ? `<a href="${encodeURI(o.screenshot)}" target="_blank" rel="noopener">${o.screenshot.split('/').pop()}</a>` : '—';
+            const transactionId = o.transactionId || '—';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="small">${o.orderId}</td>
+              <td class="small">${o.email||'—'}</td>
+              <td class="small">${o.phone||'—'}</td>
+              <td class="small">${screenshotLabel}</td>
+              <td class="small">${transactionId}</td>
+              <td class="small">₹${o.price||''}</td>
+              <td class="small">${o.status}</td>
+              <td class="small">${formatDate(o.createdAt)}</td>
+              <td class="small" style="white-space:nowrap">
+                ${o.status !== 'paid' ? '<button class="btn-approve">Approve</button>' : ''}
+                <button class="btn-send">📲 Send via WhatsApp</button>
+              </td>
+            `;
           const approveBtn = tr.querySelector('.btn-approve');
           const sendBtn = tr.querySelector('.btn-send');
           if(approveBtn){ approveBtn.addEventListener('click', ()=> approveOrder(o.orderId, o, approveBtn)); }
@@ -91,7 +103,7 @@
       const doSend = ()=>{
         const phone = (order.phone || '').replace(/[^0-9]/g,'');
         const to = phone.length===10 ? '91'+phone : phone;
-        const msg = `Namaste! 🙏 Aapka *Dil Se Shayari* ebook ready hai.\n\nDownload: ${location.origin}${EBOOK_URL}\n\nOrder ID: ${order.orderId}\n\nShukriya for your order!`;
+        const msg = `Namaste! 🙏 Aapka *Dil Se Shayari* ebook ready hai.\n\nDownload: ${getEbookLink()}\n\nOrder ID: ${order.orderId}\n\nShukriya for your order!`;
         const waUrl = 'https://wa.me/' + encodeURIComponent(to) + '?text=' + encodeURIComponent(msg);
         window.open(waUrl, '_blank');
       };
@@ -112,7 +124,12 @@
 
     document.getElementById('logout').addEventListener('click', ()=>{ localStorage.removeItem('adminPassword'); localStorage.removeItem('adminKey'); localStorage.removeItem('adminUsername'); window.location.href='/admin.html'; });
 
-    fetchOrders();
+    fetch('/api/config').then(r=>r.json()).then(cfg=>{
+      if(cfg.clientBaseUrl) clientBaseUrl = cfg.clientBaseUrl;
+      if(cfg.ebookUrl) ebookPath = cfg.ebookUrl;
+    }).catch(()=>{}).finally(()=>{
+      fetchOrders();
+    });
   </script>
 </body>
 </html>

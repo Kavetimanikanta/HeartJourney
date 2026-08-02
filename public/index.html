@@ -821,6 +821,40 @@
     font-size:12px;
   }
   .pay-copy-btn:hover{ background:rgba(255,255,255,0.18); }
+  .pay-qr-section{
+    margin-top:18px;
+    text-align:center;
+  }
+  .pay-qr-label{
+    font-size:14px;
+    margin-bottom:14px;
+    color:#3F2A21;
+  }
+  .pay-qr-code{
+    display:inline-block;
+    padding:14px;
+    background:#fff;
+    border:1px solid rgba(44,30,19,0.12);
+    border-radius:18px;
+    margin-bottom:12px;
+  }
+  .pay-qr-note{
+    font-size:13px;
+    color:#5B4A3F;
+    margin-bottom:12px;
+  }
+  .pay-action-btn{
+    width:100%;
+    border:none;
+    border-radius:14px;
+    background:#3F6B4A;
+    color:#fff;
+    font-weight:700;
+    padding:14px 0;
+    cursor:pointer;
+    margin-bottom:16px;
+  }
+  .pay-action-btn:hover{ background:#345A3E; }
   .pay-wa-fallback{
     display:block;
     margin-top:14px;
@@ -836,6 +870,7 @@
     .sticky-cta{ top:10px; right:10px; font-size:12.5px; padding:9px 15px; border-radius:9px; }
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -898,9 +933,7 @@
       <h3 class="pay-title">Pay via UPI</h3>
       <p class="pay-amount">Amount: <span>₹149</span></p>
 
-      <a href="#" id="payUpiLink" target="_blank" class="pay-open-btn">📲 Open GPay / PhonePe / Paytm</a>
-
-      <p class="pay-upload-label">Already paid? Upload your payment screenshot — it's shown in your UPI app's payment history / receipt.</p>
+      <p class="pay-upload-label">Scan the QR below with your UPI app. The amount (₹149) and order details are already included in the QR.</p>
 
       <label class="pay-upload-box" id="payUploadBox">
         <span id="payUploadText">Choose screenshot</span>
@@ -920,8 +953,15 @@
           </div>
       </div>
 
-      <button type="button" class="pay-submit-btn" id="paySubmitBtn">✅ I've Paid — Submit</button>
-      <p class="pay-status" id="payStatus"></p>
+        <div class="pay-qr-section">
+      <div class="pay-qr-label">Scan this QR with your UPI app</div>
+      <div id="payQrCode" class="pay-qr-code"></div>
+        <p class="pay-qr-note">The QR already includes the payment amount and order details. Scan it with PhonePe, Google Pay, Paytm, or any UPI app.</p>
+          </div>
+
+        <a href="#" id="payOpenBtn" class="pay-open-btn">Pay ₹149</a>
+        <button type="button" class="pay-submit-btn" id="paySubmitBtn">✅ I've Paid — Submit</button>
+        <p class="pay-status" id="payStatus"></p>
 
       <a href="#" id="payWhatsappFallback" target="_blank" class="pay-wa-fallback">Or message us on WhatsApp instead</a>
     </div>
@@ -1245,13 +1285,16 @@
 
   function goToForm(e){
     if(e) e.preventDefault();
-    openNotice();
-    return false;
-  }
-  function openNotice(){
-    if(!detailsNotice) return;
-    detailsNotice.classList.add('open');
-  }
+      const target = document.getElementById('cta');
+      if(target){
+        target.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+      return false;
+    }
+    function openNotice(){
+      if(!detailsNotice) return;
+      detailsNotice.classList.add('open');
+    }
   function closeNoticeAndScroll(){
     if(!detailsNotice) return;
     detailsNotice.classList.remove('open');
@@ -1278,17 +1321,37 @@
   const paymentModal = document.getElementById('paymentModal');
   const payUpiIdEl = document.getElementById('payUpiId');
   const payOrderIdEl = document.getElementById('payOrderId');
-  const payUpiLink = document.getElementById('payUpiLink');
   const payUploadBox = document.getElementById('payUploadBox');
   const payScreenshot = document.getElementById('payScreenshot');
   const payPreview = document.getElementById('payPreview');
   const payUploadText = document.getElementById('payUploadText');
   const paySubmitBtn = document.getElementById('paySubmitBtn');
+  const payQrCode = document.getElementById('payQrCode');
   const payStatus = document.getElementById('payStatus');
   const payWhatsappFallback = document.getElementById('payWhatsappFallback');
-  const MERCHANT_UPI = '9346694527@ybl';
+  const payOpenBtn = document.getElementById('payOpenBtn');
+  const payAmountEl = document.querySelector('.pay-amount span');
+  const payQrNote = document.querySelector('.pay-qr-note');
+
+  const DEFAULT_MERCHANT_UPI = '9346694527@ybl';
+  const DEFAULT_PAYEE_NAME = 'From First Glance To Forever';
+  const DEFAULT_PAY_AMOUNT = 149;
+  const DEFAULT_WHATSAPP_NUMBER = '919346694527';
+
+  let merchantUpi = DEFAULT_MERCHANT_UPI;
+  let payeeName = DEFAULT_PAYEE_NAME;
+  let payAmount = DEFAULT_PAY_AMOUNT;
+  let whatsappNumber = DEFAULT_WHATSAPP_NUMBER;
   let currentOrderId = '';
   let currentBuyer = null;
+
+  fetch('/api/config').then((res) => res.json()).then(cfg => {
+    if(cfg.merchantUpi) merchantUpi = cfg.merchantUpi;
+    if(cfg.price) payAmount = cfg.price;
+    if(cfg.upiPayeeName) payeeName = cfg.upiPayeeName;
+    if(cfg.whatsappNumber) whatsappNumber = cfg.whatsappNumber;
+    if(payAmountEl){ payAmountEl.textContent = '₹' + payAmount; }
+  }).catch(() => {});
 
   function makeOrderId(){
     let id = '';
@@ -1301,18 +1364,49 @@
     currentBuyer = buyer;
     currentOrderId = makeOrderId();
     payOrderIdEl.textContent = currentOrderId;
-    payUpiIdEl.textContent = MERCHANT_UPI;
-    const upiUrl = 'upi://pay?pa=' + encodeURIComponent(MERCHANT_UPI)
-      + '&pn=' + encodeURIComponent('From First Glance To Forever')
-      + '&am=149&cu=INR&tn=' + encodeURIComponent(currentOrderId);
-    payUpiLink.href = upiUrl;
+    payUpiIdEl.textContent = merchantUpi;
+    if(payAmountEl){ payAmountEl.textContent = '₹' + payAmount; }
+    const upiUrl = 'upi://pay?pa=' + encodeURIComponent(merchantUpi)
+      + '&pn=' + encodeURIComponent(payeeName)
+      + '&am=' + encodeURIComponent(payAmount)
+      + '&cu=INR&tn=' + encodeURIComponent(currentOrderId);
+    if(payOpenBtn){
+      payOpenBtn.href = upiUrl;
+      payOpenBtn.textContent = 'Pay ₹' + payAmount;
+      payOpenBtn.style.display = 'block';
+    }
+    if(payQrNote){ payQrNote.textContent = 'Tap Pay ₹' + payAmount + ' or scan the QR. Your UPI app will prefill the amount and order details.'; }
+    if(payQrCode){
+      payQrCode.innerHTML = '';
+      if(window.QRCode){
+        try {
+          new QRCode(payQrCode, {
+            text: upiUrl,
+            width: 220,
+            height: 220,
+            colorDark: '#2C1E13',
+            colorLight: '#ffffff',
+            correctLevel: (QRCode && QRCode.CorrectLevel && QRCode.CorrectLevel.H) ? QRCode.CorrectLevel.H : undefined
+          });
+        } catch (qrError) {
+          const img = document.createElement('img');
+          img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(upiUrl);
+          img.alt = 'UPI QR code';
+          img.style.maxWidth = '100%';
+          payQrCode.appendChild(img);
+        }
+      } else {
+        const img = document.createElement('img');
+        img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(upiUrl);
+        img.alt = 'UPI QR code';
+        img.style.maxWidth = '100%';
+        payQrCode.appendChild(img);
+      }
+    }
     const waFallback = document.getElementById('payWhatsappFallback');
     if(waFallback){
-      let msg = 'Hi! I paid for "From First Glance To Forever" (₹149).%0A';
-      msg += 'Order ID: ' + encodeURIComponent(currentOrderId) + '%0A';
-      msg += 'Name: ' + encodeURIComponent(buyer.name || '') + '%0A';
-      msg += 'Phone: ' + encodeURIComponent(buyer.phone || '');
-      waFallback.href = 'https://wa.me/919346694527?text=' + msg;
+      const msg = `Hi! I paid for "${payeeName}" (₹${payAmount}).\nOrder ID: ${currentOrderId}\nName: ${buyer.name || ''}\nPhone: ${buyer.phone || ''}`;
+      waFallback.href = 'https://wa.me/' + encodeURIComponent(whatsappNumber) + '?text=' + encodeURIComponent(msg);
     }
     payScreenshot.value = '';
     payPreview.style.display = 'none';

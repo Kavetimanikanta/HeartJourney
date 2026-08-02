@@ -3,6 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Tesseract = require('tesseract.js');
 const config = require('./config');
 
 const app = express();
@@ -47,6 +48,59 @@ if(process.env.SMTP_HOST){
   });
 }
 
+let ocrWorker = null;
+let ocrWorkerInitPromise = null;
+
+async function initOcrWorker() {
+  if (ocrWorkerInitPromise) return ocrWorkerInitPromise;
+  ocrWorker = Tesseract.createWorker();
+  ocrWorkerInitPromise = (async () => {
+    await ocrWorker.load();
+    await ocrWorker.loadLanguage('eng');
+    await ocrWorker.initialize('eng');
+  })();
+  return ocrWorkerInitPromise;
+}
+
+async function extractTextFromImage(filePath) {
+  try {
+    await initOcrWorker();
+    const { data } = await ocrWorker.recognize(filePath);
+    return data && data.text ? data.text : '';
+  } catch (err) {
+    console.error('OCR extraction failed:', err && err.message ? err.message : err);
+    return '';
+  }
+}
+
+function parseTransactionId(text) {
+  if (!text || typeof text !== 'string') return null;
+  const normalized = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const keywords = [
+    /(?:UTR|TXN(?:\s*ID)?|TRANSACTION\s*ID|TRANSACTION\s*NO\.?|REF(?:ERENCE)?\s*NO\.?|REFERENCE)\s*[:\-–]?\s*([A-Z0-9\/\-]{8,40})/i,
+    /(?:UTR|TXN|REF|REFERENCE)\s*[:\-–]?\s*([A-Z0-9]{8,40})/i,
+  ];
+  for (const pattern of keywords) {
+    const match = normalized.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  const fallback = normalized.match(/\b([A-Z0-9]{12,40})\b/g);
+  if (!fallback) return null;
+  for (const candidate of fallback) {
+    if (/^ORDER_/i.test(candidate)) continue;
+    if (/^\d{10,}$/.test(candidate)) continue;
+    return candidate;
+  }
+  return fallback[0] || null;
+}
+
+async function extractTransactionIdFromScreenshot(filePath) {
+  const text = await extractTextFromImage(filePath);
+  return parseTransactionId(text);
+}
+
 // ---- Static files ----
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR)); // used by the admin order list below
@@ -63,10 +117,51 @@ function writeOrders(orders) {
   fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
 }
 
-// ---- Routes ----
+function buildEbookUrl() {
+  let ebookUrl = config.EBOOK_URL || '/ebook.pdf';
+  if (!/^https?:\/\//i.test(ebookUrl)) {
+    const base = config.CLIENT_BASE_URL || process.env.SITE_ORIGIN || `http://localhost:${config.PORT}`;
+    ebookUrl = base.replace(/\/$/, '') + '/' + ebookUrl.replace(/^\//, '');
+  }
+  return ebookUrl;
+}
 
+function sendCustomerReceiptEmail(order) {
+  if (!mailTransport || !order.email) return;
+  try {
+    const customerMsg = {
+      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      to: order.email,
+      subject: `Your order ${order.orderId} — ${config.APP_NAME}`,
+      text: `Namaste! Aapka payment proof humne prapt kar liya hai. Aapka order ab verification ke liye jaa raha hai. Order ID: ${order.orderId}`,
+      html: `<p>Namaste! 🙏</p><p>Humein aapka payment proof mil gaya hai.</p><p>Aapka order ab verification ke liye jaa raha hai.</p><p>Order ID: <strong>${order.orderId}</strong></p><p>Jab order verify ho jayega, tab aapko ebook bhej diya jayega.</p>`
+    };
+    mailTransport.sendMail(customerMsg).catch(() => {});
+  } catch (e) { /* ignore email errors */ }
+}
+
+function sendCustomerEbookEmail(order) {
+  if (!mailTransport || !order.email) return;
+  try {
+    const ebookUrl = buildEbookUrl();
+    const customerMsg = {
+      from: process.env.SMTP_FROM || 'no-reply@example.com',
+      to: order.email,
+      subject: `Your ebook is ready — ${config.APP_NAME}`,
+      text: `Namaste! Aapka ${config.APP_NAME} ebook ready hai. Download kara: ${ebookUrl} \n\nOrder ID: ${order.orderId}`,
+      html: `<p>Namaste! 🙏</p><p>Aapka <strong>${config.APP_NAME}</strong> ebook ready hai.</p><p><a href="${ebookUrl}" target="_blank">Download your ebook</a></p><p>Order ID: <strong>${order.orderId}</strong></p><p>Shukriya for your order!</p>`
+    };
+    const ebookPath = path.join(__dirname, 'public', (config.EBOOK_URL || '/ebook.pdf').replace(/^\//, ''));
+    if (fs.existsSync(ebookPath)) {
+      customerMsg.attachments = [{ filename: path.basename(ebookPath), path: ebookPath }];
+    }
+    mailTransport.sendMail(customerMsg).catch(() => {});
+  } catch (e) { /* ignore email errors */ }
+}
+
+// ---- Routes ----
 // Customer submits name/phone/email + payment screenshot after paying.
-app.post('/api/orders', upload.single('screenshot'), (req, res) => {
+app.post('/api/orders', upload.single('screenshot'), async (req, res) => {
   const { orderId, name, phone, email, whatsapp } = req.body;
 
   if (!name || !name.trim()) {
@@ -79,6 +174,14 @@ app.post('/api/orders', upload.single('screenshot'), (req, res) => {
     return res.status(400).json({ success: false, error: 'Payment screenshot is required.' });
   }
 
+  const screenshotPath = `/uploads/${req.file.filename}`;
+  let transactionId = null;
+  try {
+    transactionId = await extractTransactionIdFromScreenshot(req.file.path);
+  } catch (e) {
+    console.error('Failed to extract transaction id from screenshot:', e && e.message ? e.message : e);
+  }
+
   const orders = readOrders();
   const order = {
     id: orders.length + 1,
@@ -87,7 +190,8 @@ app.post('/api/orders', upload.single('screenshot'), (req, res) => {
     phone: phone.trim(),
     email: (email || '').trim(),
     whatsapp: (whatsapp || '').trim(),
-    screenshot: `/uploads/${req.file.filename}`,
+    screenshot: screenshotPath,
+    transactionId: transactionId || null,
     price: config.PRICE,
     status: 'pending_verification',
     createdAt: new Date().toISOString()
@@ -107,28 +211,8 @@ app.post('/api/orders', upload.single('screenshot'), (req, res) => {
     mailTransport.sendMail(adminMsg).catch(() => {});
   }
 
-  // send customer email with ebook link (if email provided)
   if (mailTransport && order.email) {
-    try {
-      const siteOrigin = config.CLIENT_BASE_URL || process.env.SITE_ORIGIN || `http://localhost:${config.PORT}`;
-      let ebookUrl = config.EBOOK_URL || '/ebook.pdf';
-      if (!/^https?:\/\//i.test(ebookUrl)) {
-        ebookUrl = siteOrigin.replace(/\/$/, '') + '/' + ebookUrl.replace(/^\//, '');
-      }
-      const customerMsg = {
-        from: process.env.SMTP_FROM || 'no-reply@example.com',
-        to: order.email,
-        subject: `Your order ${order.orderId} — ${config.APP_NAME}`,
-        text: `Namaste! Aapka ${config.APP_NAME} ebook ready hai. Download: ${ebookUrl} \n\nOrder ID: ${order.orderId} \n\nShukriya for your order!`,
-        html: `<p>Namaste! 🙏</p><p>Aapka <strong>${config.APP_NAME}</strong> ebook ready hai.</p><p><a href="${ebookUrl}" target="_blank">Download your ebook</a></p><p>Order ID: <strong>${order.orderId}</strong></p><p>Shukriya for your order!</p>`
-      };
-      // attach PDF if present in public folder
-      const ebookPath = path.join(__dirname, 'public', (config.EBOOK_URL || '/ebook.pdf').replace(/^\//, ''));
-      if (fs.existsSync(ebookPath)) {
-        customerMsg.attachments = [{ filename: path.basename(ebookPath), path: ebookPath }];
-      }
-      mailTransport.sendMail(customerMsg).catch(() => {});
-    } catch (e) { /* ignore email errors */ }
+    sendCustomerReceiptEmail(order);
   }
 
   res.json({ success: true, message: 'Order received', orderId: order.orderId });
@@ -163,6 +247,9 @@ app.post('/api/orders/:orderId/approve', (req, res) => {
   ord.status = 'paid';
   ord.approvedAt = new Date().toISOString();
   writeOrders(orders);
+  if (mailTransport && ord.email) {
+    sendCustomerEbookEmail(ord);
+  }
   res.json({ success: true, order: ord });
 });
 
@@ -172,6 +259,7 @@ app.get('/api/config', (req, res) => {
     appName: config.APP_NAME,
     productName: config.PRODUCT_NAME,
     merchantUpi: config.MERCHANT_UPI,
+    upiPayeeName: config.UPI_PAYEE_NAME,
     whatsappNumber: config.WHATSAPP_NUMBER,
     price: config.PRICE,
     ebookUrl: config.EBOOK_URL,
