@@ -5,39 +5,27 @@
   <title>Payment Under Review</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root { color-scheme: dark; color:#F7E9DA; background:#2C1E13; }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; font-family:'Inter',sans-serif; background:#20140c; display:flex; align-items:center; justify-content:center; padding:20px; }
-    .page { width:100%; max-width:460px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:24px; padding:32px; box-shadow:0 30px 80px -34px rgba(0,0,0,0.55); }
-    .icon { font-size:42px; display:inline-flex; width:72px; height:72px; align-items:center; justify-content:center; background:rgba(255,255,255,0.08); border-radius:22px; margin-bottom:22px; }
-    h1 { margin:0 0 12px; font-family:'Cormorant Garamond',serif; font-size:30px; line-height:1.1; color:#E5C8A0; }
-    p { margin:0 0 24px; font-size:15px; line-height:1.75; color:rgba(247,233,218,0.88); }
-    .info { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:18px; margin-bottom:24px; }
-    .info div { display:flex; justify-content:space-between; gap:12px; font-size:14px; color:#F7E9DA; margin-bottom:12px; }
-    .info div:last-child { margin-bottom:0; }
-    .info span { color:rgba(247,233,218,0.7); }
-    .btn { display:block; width:100%; text-align:center; background:#CBA366; color:#20140c; text-decoration:none; font-weight:700; padding:16px 0; border-radius:14px; margin-bottom:16px; }
-    .contact { text-align:center; font-size:13px; color:rgba(247,233,218,0.8); }
-    .contact a { color:#F8E6C1; text-decoration:none; font-weight:600; }
+    body{margin:0;font-family:Inter, sans-serif;background:#F8F2EA;color:#2C1E13;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px}
+    .card{max-width:520px;background:#fff;border-radius:22px;box-shadow:0 30px 60px rgba(44,30,19,0.12);padding:32px}
+    h1{margin:0 0 16px;font-size:32px;line-height:1.1;color:#5B4A3F}
+    p{margin:14px 0;color:#5B4A3F;line-height:1.7;font-size:16px}
+    .note{margin-top:22px;font-size:14px;color:#8A6A52}
+    .order-id{margin-top:20px;padding:14px;border-radius:12px;background:#F1E4D4;color:#3B2A22;font-weight:700;word-break:break-all}
   </style>
 </head>
 <body>
-  <main class="page">
-    <div class="icon">⌛</div>
-    <h1>Payment Received — Under Review</h1>
-    <p>Shukriya! Humein aapka payment proof mil gaya hai. Verify hone ke baad aapko ebook WhatsApp ya email par bhej diya jayega.</p>
-    <div class="info">
-      <div><span>Order ID</span><strong id="displayOrderId">—</strong></div>
-      <div><span>Status</span><strong>Awaiting Verification</strong></div>
-    </div>
-    <a href="/" class="btn">Back to Home</a>
-    <p class="contact">Need help? Contact us on WhatsApp: <a href="https://wa.me/919346694527" target="_blank" rel="noopener">+91 93466 94527</a></p>
-  </main>
+  <div class="card">
+    <h1>Thank you. Payment proof received.</h1>
+    <p>Your order is now under verification. Once the admin approves it, you will receive the ebook download link on WhatsApp.</p>
+    <p class="note">Please do not refresh this page. Your payment proof has already been submitted.</p>
+    <div id="orderInfo" class="order-id">Order ID: <span id="orderIdText">—</span></div>
+  </div>
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const orderId = params.get("orderId") || "—";
-    const el = document.getElementById("displayOrderId");
-    if(el) el.textContent = orderId;
+    const params = new URLSearchParams(location.search);
+    const orderId = params.get('orderId');
+    if (orderId) {
+      document.getElementById('orderIdText').textContent = orderId;
+    }
   </script>
 </body>
 </html>
